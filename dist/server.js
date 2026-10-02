@@ -49,9 +49,10 @@ async function listenMetrics(render, contentType, target, deps) {
         });
         server.listen(target.port, target.host, resolve);
     });
-    const { port } = server.address();
+    const { port, address } = server.address();
     return {
         host: target.host,
+        boundAddress: address,
         port,
         close: () => new Promise((resolve) => {
             server.close(() => resolve());

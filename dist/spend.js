@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Spend = exports.UNITS = void 0;
+exports.Spend = exports.SPEND_METRIC_NAMES = exports.UNITS = void 0;
 exports.assertPaidApiDeclaration = assertPaidApiDeclaration;
 const errors_1 = require("./errors");
+const labels_1 = require("./labels");
 exports.UNITS = new Set([
     'input_uncached',
     'input_cache_read',
@@ -10,6 +11,13 @@ exports.UNITS = new Set([
     'output',
     'requests',
 ]);
+exports.SPEND_METRIC_NAMES = {
+    calls: 'app_paid_api_calls_total',
+    units: 'app_paid_api_units_total',
+    cost: 'app_paid_api_cost_usd_total',
+    unpriced: 'app_paid_api_unpriced_units_total',
+    invalid: 'app_metrics_invalid_value_total',
+};
 const isUnit = (key) => exports.UNITS.has(key);
 // Never a declared model name, so a model reported under the wrong provider is rejected like an unknown one.
 const NOT_DECLARED = '';
@@ -22,6 +30,9 @@ function assertPaidApiDeclaration(opts) {
     if (opts.models.length === 0 || opts.models.some((m) => typeof m !== 'string' || m === '')) {
         bad('models must be a non-empty list of non-empty strings');
     }
+    (0, labels_1.assertLabelValue)(opts.provider, 'paid API provider');
+    for (const model of opts.models)
+        (0, labels_1.assertLabelValue)(model, `paid API ${JSON.stringify(opts.provider)} model`);
     for (const [model, prices] of Object.entries(opts.tariffs ?? {})) {
         if (!opts.models.includes(model))
             bad(`tariff for undeclared model ${JSON.stringify(model)}`);
@@ -69,7 +80,7 @@ class Spend {
         let priced = false;
         for (const [unit, amount] of Object.entries(e.units ?? {})) {
             if (!isUnit(unit) || typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
-                f.invalid.inc({ metric: 'app_paid_api_units_total' });
+                f.invalid.inc({ metric: exports.SPEND_METRIC_NAMES.units });
                 continue;
             }
             f.units.inc({ ...base, unit }, amount);
@@ -90,29 +101,29 @@ class Spend {
         const model = this.modelNames;
         return {
             calls: this.metrics.counter({
-                name: 'app_paid_api_calls_total',
+                name: exports.SPEND_METRIC_NAMES.calls,
                 help: 'Paid API calls by billing provider, model and outcome.',
                 labels: { provider, model, outcome: new Set(['success', 'failure']) },
             }),
             units: this.metrics.counter({
-                name: 'app_paid_api_units_total',
+                name: exports.SPEND_METRIC_NAMES.units,
                 help: 'Paid API usage units (disjoint) by billing provider and model.',
                 labels: { provider, model, unit: exports.UNITS },
             }),
             cost: this.metrics.counter({
-                name: 'app_paid_api_cost_usd_total',
+                name: exports.SPEND_METRIC_NAMES.cost,
                 help: 'Estimated USD cost, only from units that have a declared tariff.',
                 labels: { provider, model },
             }),
             unpriced: this.metrics.counter({
-                name: 'app_paid_api_unpriced_units_total',
+                name: exports.SPEND_METRIC_NAMES.unpriced,
                 help: 'Units with no declared tariff; their cost is unknown, not zero.',
                 labels: { provider, model, unit: exports.UNITS },
             }),
             invalid: this.metrics.counter({
-                name: 'app_metrics_invalid_value_total',
+                name: exports.SPEND_METRIC_NAMES.invalid,
                 help: 'Negative, non-finite or unknown-unit values that were ignored, by metric.',
-                labels: { metric: new Set(['app_paid_api_units_total']) },
+                labels: { metric: new Set([exports.SPEND_METRIC_NAMES.units]) },
             }),
         };
     }

@@ -31,6 +31,45 @@ const valueOf = (text: string, prefix: string): number | undefined => {
   return row === undefined ? undefined : Number(row.slice(prefix.length + 1));
 };
 
+describe('task names must export verbatim (finding 2)', () => {
+  it('refuses an over-long name without echoing it in full', () => {
+    const m = make();
+    const long = 'x'.repeat(65);
+    let message = '';
+    try {
+      m.declareTask(long, { expectedEverySeconds: 1 });
+    } catch (err) {
+      message = err instanceof MetricsConfigError ? `${err.code}:${err.message}` : String(err);
+    }
+    expect(message).toMatch(/^INVALID_ARGUMENT:/);
+    expect(message).not.toContain(long);
+  });
+
+  it('accepts a name of exactly the maximum length, and honours labelValueMaxLength', () => {
+    const m = make();
+    expect(codeOf(() => m.declareTask('x'.repeat(64), { expectedEverySeconds: 1 }))).toBeUndefined();
+    const small = createMetrics({ enabled: true, version: '1', defaultMetrics: false, labelValueMaxLength: 4 });
+    open.push(small);
+    expect(codeOf(() => small.declareTask('abcde', { expectedEverySeconds: 1 }))).toBe('INVALID_ARGUMENT');
+  });
+
+  it.each(['a|b', 'a b', 'a\nb', 'a\u0000b'])('refuses task name %j', (name) => {
+    expect(codeOf(() => make().declareTask(name, { expectedEverySeconds: 1 }))).toBe('INVALID_ARGUMENT');
+  });
+
+  it('two over-long names can no longer share the __other__ series (running never goes negative)', async () => {
+    const m = make();
+    const results = ['a'.repeat(70), 'b'.repeat(70)].map((n) => codeOf(() => m.declareTask(n, { expectedEverySeconds: 1 })));
+    expect(results).toEqual(['INVALID_ARGUMENT', 'INVALID_ARGUMENT']);
+    expect(await m.render()).not.toContain('task="__other__"');
+  });
+
+  it('the disabled instance refuses the same names', () => {
+    const m = createMetrics({ enabled: false, version: '1' });
+    expect(codeOf(() => m.declareTask('x'.repeat(65), { expectedEverySeconds: 1 }))).toBe('INVALID_ARGUMENT');
+  });
+});
+
 describe('tasks', () => {
   it('counts a success, observes duration, and sets last_success', async () => {
     const m = make();

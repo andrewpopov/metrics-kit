@@ -219,7 +219,7 @@ describe.each([
 
   it('refuses bad declarations by name', () => {
     const bad = (routes: string[]) => codeOf(() => httpMetrics(createMetrics({ enabled: true, version: '1', defaultMetrics: false }), { routes }));
-    for (const entry of ['FETCH /x', '/x', 'GET x', 'GET /a/*/b', 'GET /a?b=1', 'GET /a/(\\d+)', 'GET /a/b+', 'GET /a/', 'GET /a//b', 'GET /a*', 'GET /:', 'GET /a:b']) {
+    for (const entry of ['FETCH /x', '/x', 'GET x', 'GET /a/*/b', 'GET /a?b=1', 'GET /a/(\\d+)', 'GET /a/b+', 'GET /a/', 'GET /a//b', 'GET /a*', 'GET /:', 'GET /a:b', 'GET /a b', 'GET /a\u0001b', 'GET /a\u007fb']) {
       expect(bad([entry]), entry).toBe('INVALID_ARGUMENT');
     }
     expect(bad(['GET /a', 'GET /a'])).toBe('INVALID_ARGUMENT');

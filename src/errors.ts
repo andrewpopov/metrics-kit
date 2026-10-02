@@ -8,7 +8,8 @@ export type MetricsConfigErrorCode =
   | 'ALREADY_CLOSED'
   | 'UNDECLARED_TASK'
   | 'DUPLICATE_DECLARATION'
-  | 'INVALID_ARGUMENT';
+  | 'INVALID_ARGUMENT'
+  | 'DEFAULT_METRICS_ACTIVE';
 
 export class MetricsConfigError extends Error {
   readonly code: MetricsConfigErrorCode;

@@ -1,5 +1,8 @@
 import type { MetricDef } from './types';
 export declare const OTHER = "__other__";
+export declare function isValidLabelValue(value: string, maxLength?: number): boolean;
+/** Declared label values must be emitted verbatim: refuse (never coerce) ones that would not be. */
+export declare function assertLabelValue(value: string, what: string, maxLength?: number): void;
 export declare function assertMetricName(name: string): void;
 export declare function assertLabelNames(def: MetricDef, extraForbidden?: readonly string[]): void;
 /**

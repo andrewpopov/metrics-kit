@@ -65,9 +65,10 @@ export async function listenMetrics(
     server.listen(target.port, target.host, resolve);
   });
 
-  const { port } = server.address() as AddressInfo;
+  const { port, address } = server.address() as AddressInfo;
   return {
     host: target.host,
+    boundAddress: address,
     port,
     close: () =>
       new Promise<void>((resolve) => {

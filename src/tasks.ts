@@ -1,12 +1,24 @@
 import { MetricsConfigError } from './errors';
+import { assertLabelValue } from './labels';
 import type { BoundCounter, BoundGauge, BoundHistogram, Metrics, TaskOptions } from './types';
 
 export const TASK_DURATION_BUCKETS = [1, 5, 15, 60, 300, 900, 3600] as const;
 
-export function assertTaskDeclaration(name: string, opts: TaskOptions): void {
+export const TASK_METRIC_NAMES = {
+  runs: 'app_task_runs_total',
+  duration: 'app_task_duration_seconds',
+  running: 'app_task_running',
+  lastSuccess: 'app_task_last_success_timestamp_seconds',
+  declared: 'app_task_declared_timestamp_seconds',
+  expected: 'app_task_expected_interval_seconds',
+} as const;
+
+/** Task state is keyed by name, so a name must export verbatim: one that would be coerced to `__other__` could share a series. */
+export function assertTaskDeclaration(name: string, opts: TaskOptions, labelMaxLength: number): void {
   if (typeof name !== 'string' || name === '') {
     throw new MetricsConfigError('INVALID_ARGUMENT', 'task name must be a non-empty string');
   }
+  assertLabelValue(name, 'task name', labelMaxLength);
   if (!Number.isFinite(opts.expectedEverySeconds) || opts.expectedEverySeconds <= 0) {
     throw new MetricsConfigError('INVALID_ARGUMENT', `task ${name}: expectedEverySeconds must be a finite number > 0`);
   }
@@ -37,10 +49,13 @@ export class Tasks {
   private readonly lastSuccessMs = new Map<string, number>();
   private families: Families | null = null;
 
-  constructor(private readonly metrics: Pick<Metrics, 'counter' | 'gauge' | 'histogram'>) {}
+  constructor(
+    private readonly metrics: Pick<Metrics, 'counter' | 'gauge' | 'histogram'>,
+    private readonly labelMaxLength: number,
+  ) {}
 
   declare(name: string, opts: TaskOptions): void {
-    assertTaskDeclaration(name, opts);
+    assertTaskDeclaration(name, opts, this.labelMaxLength);
     if (this.names.has(name)) throw new MetricsConfigError('DUPLICATE_DECLARATION', `task ${name} is already declared`);
     const f = (this.families ??= this.createFamilies());
     this.names.add(name);
@@ -81,22 +96,22 @@ export class Tasks {
     const task = this.names as ReadonlySet<string>;
     const outcome = new Set(['success', 'failure']);
     return {
-      runs: this.metrics.counter({ name: 'app_task_runs_total', help: 'Task invocations by outcome.', labels: { task, outcome } }),
+      runs: this.metrics.counter({ name: TASK_METRIC_NAMES.runs, help: 'Task invocations by outcome.', labels: { task, outcome } }),
       duration: this.metrics.histogram({
-        name: 'app_task_duration_seconds',
+        name: TASK_METRIC_NAMES.duration,
         help: 'Task invocation duration.',
         labels: { task },
         buckets: TASK_DURATION_BUCKETS,
       }),
-      running: this.metrics.gauge({ name: 'app_task_running', help: 'Task invocations currently running.', labels: { task } }),
+      running: this.metrics.gauge({ name: TASK_METRIC_NAMES.running, help: 'Task invocations currently running.', labels: { task } }),
       lastSuccess: this.metrics.gauge({
-        name: 'app_task_last_success_timestamp_seconds',
+        name: TASK_METRIC_NAMES.lastSuccess,
         help: 'Completion time of the latest successful invocation; absent until one succeeds.',
         labels: { task },
       }),
-      declared: this.metrics.gauge({ name: 'app_task_declared_timestamp_seconds', help: 'When the task was declared.', labels: { task } }),
+      declared: this.metrics.gauge({ name: TASK_METRIC_NAMES.declared, help: 'When the task was declared.', labels: { task } }),
       expected: this.metrics.gauge({
-        name: 'app_task_expected_interval_seconds',
+        name: TASK_METRIC_NAMES.expected,
         help: 'Declared expected seconds between successful runs.',
         labels: { task },
       }),

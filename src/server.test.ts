@@ -68,11 +68,58 @@ describe('serve() refusals happen before any listener exists', () => {
   });
 });
 
+const freePort = async (): Promise<number> => {
+  const probe = net.createServer();
+  await new Promise<void>((r) => probe.listen(0, '127.0.0.1', r));
+  const { port } = probe.address() as net.AddressInfo;
+  await new Promise((r) => probe.close(r));
+  return port;
+};
+const canBind = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const s = net.createServer();
+    s.once('error', () => resolve(false));
+    s.listen(port, '127.0.0.1', () => s.close(() => resolve(true)));
+  });
+
+describe('serve()/close() races (finding 1)', () => {
+  it('a concurrent second serve() is refused immediately and leaves exactly one listener', async () => {
+    const m = make();
+    const [a, b] = [await freePort(), await freePort()];
+    const first = m.serve({ port: a });
+    const second = m.serve({ port: b });
+    await expect(second).rejects.toMatchObject({ code: 'PORT_IN_USE' });
+    await first;
+    await expect(request(b, '/metrics')).rejects.toThrow();
+    expect((await request(a, '/metrics')).status).toBe(200);
+  });
+
+  it('close() during startup waits for it, closes the listener and frees the port; serve() rejects ALREADY_CLOSED', async () => {
+    const m = make();
+    const port = await freePort();
+    const started = m.serve({ port });
+    const outcome = started.then(() => 'resolved', (err: MetricsConfigError) => err.code);
+    await m.close();
+    expect(await outcome).toBe('ALREADY_CLOSED');
+    expect(await canBind(port)).toBe(true);
+  });
+
+  it('close() called twice during startup is idempotent', async () => {
+    const m = make();
+    const port = await freePort();
+    const started = m.serve({ port }).catch(() => undefined);
+    await Promise.all([m.close(), m.close()]);
+    await started;
+    expect(await canBind(port)).toBe(true);
+  });
+});
+
 describe('serve()', () => {
   it('serves /metrics over real HTTP on loopback with the content type', async () => {
     const m = make(undefined, ephemeral);
     const server = await m.serve({ port: 0 });
     expect(server?.host).toBe('127.0.0.1');
+    expect(server?.boundAddress).toBe('127.0.0.1');
     const res = await request(server!.port, '/metrics');
     expect(res.status).toBe(200);
     expect(res.type).toBe(m.contentType);

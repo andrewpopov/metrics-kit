@@ -1,4 +1,3 @@
-import { register as globalRegister } from '@prometheus-io/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMetrics, createMetricsFromEnv, MetricsConfigError, type Metrics } from './index';
 import { createMetricsInternal } from './metrics';
@@ -12,6 +11,13 @@ const make = (opts: Partial<Parameters<typeof createMetrics>[0]> = {}): Metrics 
 afterEach(async () => {
   await Promise.all(open.splice(0).map((m) => m.close()));
 });
+
+// Default-metrics collection is once per process lifetime, so each test that enables it gets a fresh module graph.
+async function freshModules() {
+  vi.resetModules();
+  const [{ createMetrics: create }, { register }] = await Promise.all([import('./metrics'), import('@prometheus-io/client')]);
+  return { create, globalRegister: register };
+}
 
 const codeOf = (fn: () => unknown): string | undefined => {
   try {
@@ -30,9 +36,11 @@ const def = (labels: Record<string, ReadonlySet<string>> = { route: new Set(['/a
 
 describe('registry isolation', () => {
   it('never touches the library global registry', async () => {
+    const { create, globalRegister } = await freshModules();
     const before = await globalRegister.metrics();
-    const a = make({ defaultMetrics: true });
-    const b = make({ defaultMetrics: true });
+    const a = create({ enabled: true, version: '1.2.3', defaultMetrics: true });
+    open.push(a);
+    const b = make();
     a.counter(def()).inc({ route: '/a' });
     b.counter(def()).inc({ route: '/a' });
     await a.render();
@@ -149,14 +157,19 @@ describe('build info and default metrics', () => {
     expect(await make({ commit: 'abc123' }).render()).toContain('commit="abc123"');
   });
 
-  it('length-caps version and commit', async () => {
-    const text = await make({ version: 'v'.repeat(100), labelValueMaxLength: 10 }).render();
-    expect(text).toContain(`version="${'v'.repeat(10)}"`);
-    expect(text).not.toContain('v'.repeat(11));
+  it('maps an over-long or invalid version/commit to __other__ (never a truncated prefix) and counts it', async () => {
+    const text = await make({ version: 'v'.repeat(100), commit: 'a b', labelValueMaxLength: 10 }).render();
+    expect(text).toContain('app_build_info{version="__other__",commit="__other__"} 1');
+    expect(text).not.toContain('vvv');
+    expect(text).toContain('app_metrics_rejected_label_total{metric="app_build_info",label="version"} 1');
+    expect(text).toContain('app_metrics_rejected_label_total{metric="app_build_info",label="commit"} 1');
   });
 
   it('collects default metrics into its own registry by default, and not when turned off', async () => {
-    expect(await make({ defaultMetrics: true }).render()).toContain('process_cpu_user_seconds_total');
+    const { create } = await freshModules();
+    const m = create({ enabled: true, version: '1', defaultMetrics: true });
+    open.push(m);
+    expect(await m.render()).toContain('process_cpu_user_seconds_total');
     expect(await make().render()).not.toContain('process_cpu_user_seconds_total');
   });
 });
@@ -179,9 +192,10 @@ describe('disabled', () => {
     timers.mockRestore();
   });
 
-  it('the enabled default-metrics collector does start a timer (so the check above can fail)', () => {
+  it('the enabled default-metrics collector does start a timer (so the check above can fail)', async () => {
+    const { create } = await freshModules();
     const timers = vi.spyOn(globalThis, 'setInterval');
-    make({ defaultMetrics: true });
+    open.push(create({ enabled: true, version: '1', defaultMetrics: true }));
     expect(timers).toHaveBeenCalled();
     timers.mockRestore();
   });
@@ -208,5 +222,95 @@ describe('internal hook is not public', () => {
     const pkg = await import('./index');
     expect(Object.keys(pkg)).not.toContain('createMetricsInternal');
     expect(typeof createMetricsInternal).toBe('function');
+  });
+});
+
+describe('declared label values (finding 3)', () => {
+  it.each([
+    ['pipe', 'x|y'],
+    ['space', 'GET /a b'],
+    ['newline', 'a\nb'],
+    ['NUL', 'a\u0000b'],
+    ['DEL', 'a\u007fb'],
+  ])('refuses a declared value containing %s at declaration', (_name, value) => {
+    const m = make();
+    expect(codeOf(() => m.counter({ name: 'c', help: 'c', labels: { k: new Set([value]) } }))).toBe('INVALID_ARGUMENT');
+  });
+
+  it('can no longer register the two tuples the client would merge ({a:"x|y",b:"z"} vs {a:"x",b:"y|z"})', () => {
+    const m = make();
+    const labels = { a: new Set(['x|y', 'x']), b: new Set(['z', 'y|z']) };
+    expect(codeOf(() => m.counter({ name: 'c', help: 'c', labels }))).toBe('INVALID_ARGUMENT');
+  });
+
+  it('applies to the disabled instance too', () => {
+    const m = createMetrics({ enabled: false, version: '1' });
+    expect(codeOf(() => m.counter({ name: 'c', help: 'c', labels: { k: new Set(['x|y']) } }))).toBe('INVALID_ARGUMENT');
+  });
+
+  it('refuses a provider or model with a forbidden character', () => {
+    const m = make();
+    expect(codeOf(() => m.declarePaidApi({ provider: 'a|b', models: ['m'] }))).toBe('INVALID_ARGUMENT');
+    expect(codeOf(() => m.declarePaidApi({ provider: 'a', models: ['m 1'] }))).toBe('INVALID_ARGUMENT');
+  });
+});
+
+describe('generated and built-in metric names (finding 4)', () => {
+  const hist = { name: 'latency', help: 'h', labels: {}, buckets: [1] };
+  it.each(['latency_count', 'latency_sum', 'latency_bucket'])('refuses gauge %s after histogram latency', (name) => {
+    const m = make();
+    m.histogram(hist);
+    expect(codeOf(() => m.gauge({ name, help: 'g', labels: {} }))).toBe('INVALID_NAME');
+  });
+
+  it.each(['latency_count', 'latency_sum', 'latency_bucket'])('refuses histogram latency after gauge %s', (name) => {
+    const m = make();
+    m.gauge({ name, help: 'g', labels: {} });
+    expect(codeOf(() => m.histogram(hist))).toBe('INVALID_NAME');
+  });
+
+  it.each([
+    'app_task_runs_total',
+    'app_task_running',
+    'app_task_duration_seconds',
+    'app_task_duration_seconds_count',
+    'app_paid_api_calls_total',
+    'app_metrics_invalid_value_total',
+    'app_metrics_rejected_label_total',
+    'app_build_info',
+  ])('a user metric cannot shadow built-in %s, even before the family exists', (name) => {
+    const m = make();
+    expect(codeOf(() => m.counter({ name, help: 'x', labels: {} }))).toBe('INVALID_NAME');
+    // the kit's own families must still register afterwards
+    m.declareTask('t', { expectedEverySeconds: 1 });
+    m.declarePaidApi({ provider: 'p', models: ['m'] });
+  });
+});
+
+describe('default metrics are once per process (finding 5)', () => {
+  it('refuses a second default-metrics instance, even after the first is closed', async () => {
+    const { create } = await freshModules();
+    const first = create({ enabled: true, version: '1', defaultMetrics: true });
+    expect(await first.render()).toContain('process_cpu_user_seconds_total');
+    expect(() => create({ enabled: true, version: '1', defaultMetrics: true })).toThrowError(expect.objectContaining({ code: 'DEFAULT_METRICS_ACTIVE' }));
+    await first.close();
+    expect(() => create({ enabled: true, version: '1', defaultMetrics: true })).toThrowError(expect.objectContaining({ code: 'DEFAULT_METRICS_ACTIVE' }));
+  });
+
+  it('a disabled, default-metrics-off, or closed-before-use instance neither takes nor affects the guard', async () => {
+    const { create } = await freshModules();
+    create({ enabled: false, version: '1', defaultMetrics: true });
+    await create({ enabled: true, version: '1', defaultMetrics: false }).close();
+    const owner = create({ enabled: true, version: '1', defaultMetrics: true });
+    await create({ enabled: true, version: '1', defaultMetrics: false }).close();
+    expect(await owner.render()).toContain('process_cpu_user_seconds_total');
+    await owner.close();
+  });
+
+  it('close() clears the registry', async () => {
+    const m = make();
+    expect(await m.render()).toContain('app_build_info');
+    await m.close();
+    expect((await m.render()).trim()).toBe('');
   });
 });

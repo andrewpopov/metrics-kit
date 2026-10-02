@@ -61,6 +61,8 @@ export interface BoundHistogram {
 
 export interface MetricsServer {
   readonly host: string;
+  /** The address the socket is actually bound to (from the listener, not the requested config). */
+  readonly boundAddress: string;
   readonly port: number;
   close(): Promise<void>;
 }

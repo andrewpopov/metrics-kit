@@ -8,7 +8,7 @@ Requires Node `^22 || ^24 || >=26` (the client library's own range).
 
 ### `close()` and default metrics
 
-`close()` stops the HTTP server. `@prometheus-io/client` 0.16.1 offers no way to stop `collectDefaultMetrics`: its event-loop-utilization `setInterval` (unref'd), event-loop-delay histogram and GC `PerformanceObserver` keep running until process exit and keep the closed registry alive. They never hold the process open, but creating many default-metrics instances in one process leaks; pass `defaultMetrics: false` for short-lived instances (tests).
+`close()` waits for any `serve()` still starting, stops the HTTP server (a `serve()` that finishes after `close()` closes its own listener and throws `ALREADY_CLOSED`) and clears the instance's registry. `@prometheus-io/client` 0.16.1 offers no way to stop `collectDefaultMetrics`: its event-loop-utilization `setInterval` (unref'd), event-loop-delay histogram and GC `PerformanceObserver` keep running until process exit. They never hold the process open, but a second collector set would double-run them, so **at most one default-metrics instance may be created per process lifetime**; a second throws `DEFAULT_METRICS_ACTIVE`, even after the first is closed. Pass `defaultMetrics: false` for any other instance (tests).
 
 ## Design
 
@@ -16,6 +16,8 @@ Requires Node `^22 || ^24 || >=26` (the client library's own range).
 - `/metrics` is served on a separate loopback-only listener (literal `127.0.0.1`) on `METRICS_PORT`, and is inert when the variable is unset.
 - Route labels come from declared templates matched by the kit, never from `req.baseUrl` or `req.route`.
 - Every label declares an explicit value set (closed enums included); unknown values become `__other__`. The label names `job`, `instance`, `app` and `host` are reserved.
+- Declared label values (route templates, task names, providers, models, enum members) must be emitted verbatim: values containing `|`, control characters or whitespace are refused at declaration with `INVALID_ARGUMENT` (the client keys series by joining values with an unescaped `|`), and a task name longer than `labelValueMaxLength` is refused too. `app_build_info` values that are too long or invalid become `__other__` and are counted in `app_metrics_rejected_label_total`, never truncated.
+- Metric names are unique including generated series: a histogram `x` also owns `x_bucket`, `x_sum` and `x_count`, and the kit's own `app_*` families are reserved up front; a colliding registration throws `INVALID_NAME`.
 - Tasks (not "jobs") emit heartbeat metrics.
 - Paid-API usage is counted in units by billing provider.
 
