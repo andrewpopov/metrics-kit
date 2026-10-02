@@ -1,7 +1,7 @@
 # metrics-kit project guidelines
 
 `@andrewpopov/metrics-kit`: fleet application metrics for Node services on
-`prom-client` — declared-route HTTP RED, runtime, task heartbeats, paid-API
+`@prometheus-io/client` (successor of the deprecated `prom-client`) — declared-route HTTP RED, runtime, task heartbeats, paid-API
 usage — exposed on a loopback-only listener. Status: v0.1 in progress
 (PKG-202; design: PKG-201 rev 2). Fleet-wide package rules live in
 `packages-meta`; this package's source and packed exports are authoritative.
@@ -19,7 +19,7 @@ usage — exposed on a loopback-only listener. Status: v0.1 in progress
 
 ## Design decisions
 
-- **One explicit Registry per `createMetrics()`.** Never the prom-client global
+- **One explicit Registry per `createMetrics()`.** Never the client library's global
   registry, so two instances in one process (and tests) cannot collide.
 - **`/metrics` on a separate loopback-only listener.** Bound to the literal
   `127.0.0.1` on `METRICS_PORT`; inert when unset. Never mounted on the app's

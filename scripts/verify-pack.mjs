@@ -58,7 +58,7 @@ try {
 
   const cjs = `
     const root = require('${pkg.name}');
-    if (root.METRICS_KIT_PLACEHOLDER !== true) throw new Error('cjs root export missing');
+    if (typeof root.createMetrics !== 'function') throw new Error('cjs root export missing');
     const adapter = require('${pkg.name}/express');
     if (adapter.METRICS_KIT_EXPRESS_PLACEHOLDER !== true) throw new Error('cjs ./express export missing');
   `;
@@ -66,9 +66,9 @@ try {
   console.log('[verify:pack] OK: CommonJS require() resolves root and ./express');
 
   const esm = `
-    import { METRICS_KIT_PLACEHOLDER } from '${pkg.name}';
+    import { createMetrics } from '${pkg.name}';
     import { METRICS_KIT_EXPRESS_PLACEHOLDER } from '${pkg.name}/express';
-    if (METRICS_KIT_PLACEHOLDER !== true) throw new Error('esm root export missing');
+    if (typeof createMetrics !== 'function') throw new Error('esm root export missing');
     if (METRICS_KIT_EXPRESS_PLACEHOLDER !== true) throw new Error('esm ./express export missing');
   `;
   run('node', ['--input-type=module', '-e', esm], { cwd: consumerDir });
