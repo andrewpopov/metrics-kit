@@ -1,6 +1,6 @@
 {
   "name": "@andrewpopov/metrics-kit",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Fleet application metrics for Node services (Prometheus client): declared-route HTTP RED, runtime, task heartbeats, paid-API usage, loopback-only exposure.",
   "author": "Andrew Popov",
   "license": "MIT",
