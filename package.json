@@ -1,0 +1,83 @@
+{
+  "name": "@andrewpopov/metrics-kit",
+  "version": "0.0.0",
+  "description": "Fleet application metrics for Node services (prom-client): declared-route HTTP RED, runtime, task heartbeats, paid-API usage, loopback-only exposure.",
+  "author": "Andrew Popov",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrewpopov/metrics-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/andrewpopov/metrics-kit/issues"
+  },
+  "homepage": "https://github.com/andrewpopov/metrics-kit#readme",
+  "keywords": [
+    "metrics",
+    "prometheus",
+    "prom-client",
+    "express",
+    "typescript"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./express": {
+      "types": "./dist/express/index.d.ts",
+      "default": "./dist/express/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json && npm run check:core-agnostic",
+    "check:core-agnostic": "node scripts/check-core-agnostic.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:pack": "node scripts/verify-pack.mjs",
+    "verify:dist-fresh": "node scripts/verify-dist-fresh.mjs",
+    "audit:runtime": "npm audit --omit=dev --audit-level=high",
+    "audit:development": "npm audit --audit-level=high",
+    "verify": "npm run typecheck && npm test && npm run build && npm run verify:dist-fresh && npm run verify:pack && npm run audit:runtime && npm run audit:development",
+    "release:note": "release-kit note",
+    "release:notes": "release-kit notes",
+    "release:bump": "release-kit bump",
+    "release:cut": "release-kit cut",
+    "release:check": "release-kit check",
+    "release:hygiene": "release-kit hygiene",
+    "prepare": "git config core.hooksPath .githooks || true"
+  },
+  "dependencies": {
+    "prom-client": "15.1.3"
+  },
+  "peerDependencies": {
+    "express": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@andrewpopov/deploy-kit": "github:andrewpopov/deploy-kit#v0.25.0",
+    "@andrewpopov/release-kit": "github:andrewpopov/release-kit#v0.3.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.14.0",
+    "@types/supertest": "^7.2.1",
+    "express": "^5.2.1",
+    "express4": "npm:express@^4.19.2",
+    "supertest": "^7.3.1",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.10"
+  }
+}
