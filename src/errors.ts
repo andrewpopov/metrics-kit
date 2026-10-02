@@ -5,7 +5,10 @@ export type MetricsConfigErrorCode =
   | 'INVALID_PORT'
   | 'PORT_IN_USE'
   | 'INVALID_NAME'
-  | 'ALREADY_CLOSED';
+  | 'ALREADY_CLOSED'
+  | 'UNDECLARED_TASK'
+  | 'DUPLICATE_DECLARATION'
+  | 'INVALID_ARGUMENT';
 
 export class MetricsConfigError extends Error {
   readonly code: MetricsConfigErrorCode;

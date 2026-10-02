@@ -10,5 +10,9 @@ export type {
   Metrics,
   MetricsOptions,
   MetricsServer,
+  PaidApiCall,
+  PaidApiOptions,
   ServeOptions,
+  TaskOptions,
+  Unit,
 } from './types';

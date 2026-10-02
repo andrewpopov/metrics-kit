@@ -6,6 +6,8 @@ exports.createMetricsFromEnv = createMetricsFromEnv;
 const client_1 = require("@prometheus-io/client");
 const errors_1 = require("./errors");
 const labels_1 = require("./labels");
+const spend_1 = require("./spend");
+const tasks_1 = require("./tasks");
 const server_1 = require("./server");
 const DEFAULT_LABEL_MAX = 64;
 const REJECTED_NAME = 'app_metrics_rejected_label_total';
@@ -21,6 +23,10 @@ function noopMetrics(validate) {
         counter: (def) => (validate(def), { inc: noop }),
         gauge: (def) => (validate(def), { set: noop, inc: noop }),
         histogram: (def) => (validate(def), { observe: noop }),
+        declareTask: tasks_1.assertTaskDeclaration,
+        trackTask: (_name, fn) => fn(),
+        declarePaidApi: spend_1.assertPaidApiDeclaration,
+        recordPaidApiCall: noop,
     };
 }
 function validateDef(def, forbiddenLabels = []) {
@@ -34,6 +40,8 @@ class EnabledMetrics {
         this.enabled = true;
         this.registry = new client_1.Registry();
         this.names = new Set();
+        this.tasks = new tasks_1.Tasks(this);
+        this.spend = new spend_1.Spend(this);
         this.server = null;
         this.closed = false;
         this.labelMax = opts.labelValueMaxLength ?? DEFAULT_LABEL_MAX;
@@ -94,6 +102,18 @@ class EnabledMetrics {
     histogram(def) {
         const metric = new client_1.Histogram({ ...this.register(def, ['le']), buckets: [...def.buckets], registers: [this.registry] });
         return { observe: (labels, value) => metric.observe(this.clean(def, labels), value) };
+    }
+    declareTask(name, opts) {
+        this.tasks.declare(name, opts);
+    }
+    trackTask(name, fn) {
+        return this.tasks.track(name, fn);
+    }
+    declarePaidApi(opts) {
+        this.spend.declare(opts);
+    }
+    recordPaidApiCall(e) {
+        this.spend.record(e);
     }
     register(def, forbiddenLabels = []) {
         validateDef(def, forbiddenLabels);

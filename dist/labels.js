@@ -33,10 +33,7 @@ function sanitizeLabels(def, input, maxLength, onReject) {
     const out = {};
     for (const [label, allowed] of Object.entries(def.labels)) {
         const value = input[label];
-        const ok = typeof value === 'string' &&
-            value.length <= maxLength &&
-            (allowed === 'closed' || allowed.has(value));
-        if (ok) {
+        if (typeof value === 'string' && value.length <= maxLength && allowed.has(value)) {
             out[label] = value;
         }
         else {

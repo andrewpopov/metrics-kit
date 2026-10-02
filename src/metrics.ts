@@ -1,6 +1,8 @@
 import { collectDefaultMetrics, Counter, Gauge, Histogram, Registry } from '@prometheus-io/client';
 import { MetricsConfigError } from './errors';
 import { assertLabelNames, assertMetricName, sanitizeLabels } from './labels';
+import { Spend, assertPaidApiDeclaration } from './spend';
+import { Tasks, assertTaskDeclaration } from './tasks';
 import { listenMetrics, LOOPBACK_HOST, parseStrictPort, type ListenDeps } from './server';
 import type {
   BoundCounter,
@@ -10,7 +12,10 @@ import type {
   Metrics,
   MetricsOptions,
   MetricsServer,
+  PaidApiCall,
+  PaidApiOptions,
   ServeOptions,
+  TaskOptions,
 } from './types';
 
 const DEFAULT_LABEL_MAX = 64;
@@ -28,6 +33,10 @@ function noopMetrics(validate: (def: MetricDef) => void): Metrics {
     counter: (def) => (validate(def), { inc: noop }),
     gauge: (def) => (validate(def), { set: noop, inc: noop }),
     histogram: (def) => (validate(def), { observe: noop }),
+    declareTask: assertTaskDeclaration,
+    trackTask: (_name, fn) => fn(),
+    declarePaidApi: assertPaidApiDeclaration,
+    recordPaidApiCall: noop,
   };
 }
 
@@ -42,6 +51,8 @@ class EnabledMetrics implements Metrics {
   private readonly names = new Set<string>();
   private readonly labelMax: number;
   private readonly rejected: Counter<'metric' | 'label'>;
+  private readonly tasks = new Tasks(this);
+  private readonly spend = new Spend(this);
   private server: MetricsServer | null = null;
   private closed = false;
 
@@ -114,6 +125,22 @@ class EnabledMetrics implements Metrics {
   histogram(def: MetricDef & { buckets: readonly number[] }): BoundHistogram {
     const metric = new Histogram({ ...this.register(def, ['le']), buckets: [...def.buckets], registers: [this.registry] });
     return { observe: (labels, value) => metric.observe(this.clean(def, labels), value) };
+  }
+
+  declareTask(name: string, opts: TaskOptions): void {
+    this.tasks.declare(name, opts);
+  }
+
+  trackTask<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    return this.tasks.track(name, fn);
+  }
+
+  declarePaidApi(opts: PaidApiOptions): void {
+    this.spend.declare(opts);
+  }
+
+  recordPaidApiCall(e: PaidApiCall): void {
+    this.spend.record(e);
   }
 
   private register(def: MetricDef, forbiddenLabels: readonly string[] = []) {

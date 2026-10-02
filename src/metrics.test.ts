@@ -22,7 +22,7 @@ const codeOf = (fn: () => unknown): string | undefined => {
   return undefined;
 };
 
-const def = (labels: Record<string, ReadonlySet<string> | 'closed'> = { route: new Set(['/a']) }) => ({
+const def = (labels: Record<string, ReadonlySet<string>> = { route: new Set(['/a']) }) => ({
   name: 'app_things_total',
   help: 'things',
   labels,
@@ -54,16 +54,16 @@ describe('registry isolation', () => {
 
 describe('label names', () => {
   it.each(['job', 'instance', 'app', 'host', '__name__', '__x'])('rejects reserved label %s', (label) => {
-    expect(codeOf(() => make().counter(def({ [label]: 'closed' })))).toBe('RESERVED_LABEL');
+    expect(codeOf(() => make().counter(def({ [label]: new Set(['x']) })))).toBe('RESERVED_LABEL');
   });
 
   it('rejects reserved label names on gauges and histograms too', () => {
-    expect(codeOf(() => make().gauge(def({ host: 'closed' })))).toBe('RESERVED_LABEL');
-    expect(codeOf(() => make().histogram({ ...def({ job: 'closed' }), buckets: [1] }))).toBe('RESERVED_LABEL');
+    expect(codeOf(() => make().gauge(def({ host: new Set(['x']) })))).toBe('RESERVED_LABEL');
+    expect(codeOf(() => make().histogram({ ...def({ job: new Set(['x']) }), buckets: [1] }))).toBe('RESERVED_LABEL');
   });
 
   it('rejects reserved label names even when disabled', () => {
-    expect(codeOf(() => createMetrics({ enabled: false, version: '1' }).counter(def({ app: 'closed' })))).toBe('RESERVED_LABEL');
+    expect(codeOf(() => createMetrics({ enabled: false, version: '1' }).counter(def({ app: new Set(['x']) })))).toBe('RESERVED_LABEL');
   });
 });
 
@@ -80,7 +80,7 @@ describe('metric names', () => {
   });
 
   it('rejects "le" as a histogram label', () => {
-    expect(codeOf(() => make().histogram({ ...def({ le: 'closed' }), buckets: [1] }))).toBe('INVALID_NAME');
+    expect(codeOf(() => make().histogram({ ...def({ le: new Set(['x']) }), buckets: [1] }))).toBe('INVALID_NAME');
   });
 });
 
@@ -101,20 +101,28 @@ describe('label values', () => {
     expect(await m.render()).not.toContain('secret-token-abc123');
   });
 
-  it('rejects values longer than labelValueMaxLength, even for closed labels', async () => {
+  it('rejects values longer than labelValueMaxLength, even when declared in the set', async () => {
     const m = make({ labelValueMaxLength: 8 });
-    m.counter({ name: 'c', help: 'c', labels: { k: 'closed' } }).inc({ k: 'x'.repeat(9) });
+    m.counter({ name: 'c', help: 'c', labels: { k: new Set(['x'.repeat(9)]) } }).inc({ k: 'x'.repeat(9) });
     const text = await m.render();
     expect(text).toContain('c{k="__other__"} 1');
     expect(text).not.toContain('xxxxxxxxx');
   });
 
-  it('passes allowed values and closed-label values through', async () => {
+  it('passes declared values through', async () => {
     const m = make();
-    m.counter({ name: 'c', help: 'c', labels: { k: 'closed', r: new Set(['/a']) } }).inc({ k: 'anything', r: '/a' });
+    m.counter({ name: 'c', help: 'c', labels: { k: new Set(['anything']), r: new Set(['/a']) } }).inc({ k: 'anything', r: '/a' });
     const text = await m.render();
     expect(text).toContain('c{k="anything",r="/a"} 1');
     expect(text).not.toContain('app_metrics_rejected_label_total{');
+  });
+
+  it('maps a value outside a declared enum set to __other__ (there is no unchecked label mode)', async () => {
+    const m = make();
+    m.counter({ name: 'e', help: 'e', labels: { outcome: new Set(['success', 'failure']) } }).inc({ outcome: 'weird' });
+    const text = await m.render();
+    expect(text).toContain('e{outcome="__other__"} 1');
+    expect(text).toContain('app_metrics_rejected_label_total{metric="e",label="outcome"} 1');
   });
 
   it('treats a missing declared label as rejected and ignores undeclared keys', async () => {
