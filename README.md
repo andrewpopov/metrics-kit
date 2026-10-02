@@ -46,20 +46,18 @@ Units are **disjoint** (`input_uncached`, `input_cache_read`, `input_cache_write
 - OpenAI: `cached_tokens` is a *subset* of `prompt_tokens`, so `input_uncached = prompt_tokens - cached_tokens`, `input_cache_read = cached_tokens`, `output = completion_tokens`.
 - Anthropic: cache usage is *separate* from `input_tokens`, so `input_uncached = input_tokens`, `input_cache_read = cache_read_input_tokens`, `input_cache_write = cache_creation_input_tokens`, `output = output_tokens`.
 
-## Planned API (not implemented)
+## HTTP metrics (Express)
 
 ```ts
-import { createMetrics } from '@andrewpopov/metrics-kit';
-import { metricsMiddleware } from '@andrewpopov/metrics-kit/express';
+import { httpMetrics } from '@andrewpopov/metrics-kit/express';
 
-const metrics = createMetrics({
-  app: 'myservice',
-  routes: ['/users/:id', '/health'],   // declared templates
-});
-
-app.use(metricsMiddleware(metrics));   // HTTP RED by declared route
-await metrics.listen();                // loopback-only, needs METRICS_PORT
+app.use(httpMetrics(metrics, {          // mount FIRST
+  routes: ['GET /users/:id', 'PATCH /users/:id', 'GET /assets/*'],
+  ignore: ['/healthz'],                 // path prefixes not measured at all
+}));
 ```
+
+Emits `http_server_request_duration_seconds{method,route,status_class}` (buckets 0.025 to 2.5 s) and `http_server_requests_in_flight`. `route` is the **declared template** matched against `req.originalUrl`, never Express's own routing (`req.route`/`req.baseUrl`), so a mounted router cannot change it and a secret in the URL can never become a label; anything undeclared is `__unmatched__`. Declarations are `<METHOD> <path>` (METHOD is GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS or `*`); segments are literals, `:param` (exactly one segment) or a final `*` (one or more segments); the most specific declaration wins (literal, then `:param`, then `*`). At most 200 routes; a bad declaration throws `MetricsConfigError('INVALID_ARGUMENT')`. `status_class` is `1xx` to `5xx`, or `aborted` when the client went away before the response finished. With disabled metrics the middleware is a pass-through. Works with Express 4 and 5.
 
 ## Development
 

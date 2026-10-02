@@ -60,16 +60,16 @@ try {
     const root = require('${pkg.name}');
     if (typeof root.createMetrics !== 'function') throw new Error('cjs root export missing');
     const adapter = require('${pkg.name}/express');
-    if (adapter.METRICS_KIT_EXPRESS_PLACEHOLDER !== true) throw new Error('cjs ./express export missing');
+    if (typeof adapter.httpMetrics !== 'function') throw new Error('cjs ./express export missing');
   `;
   run('node', ['-e', cjs], { cwd: consumerDir });
   console.log('[verify:pack] OK: CommonJS require() resolves root and ./express');
 
   const esm = `
     import { createMetrics } from '${pkg.name}';
-    import { METRICS_KIT_EXPRESS_PLACEHOLDER } from '${pkg.name}/express';
+    import { httpMetrics } from '${pkg.name}/express';
     if (typeof createMetrics !== 'function') throw new Error('esm root export missing');
-    if (METRICS_KIT_EXPRESS_PLACEHOLDER !== true) throw new Error('esm ./express export missing');
+    if (typeof httpMetrics !== 'function') throw new Error('esm ./express export missing');
   `;
   run('node', ['--input-type=module', '-e', esm], { cwd: consumerDir });
   console.log('[verify:pack] OK: native ESM import resolves root and ./express');
