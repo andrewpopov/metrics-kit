@@ -32,7 +32,7 @@ const REQUIRED_FILES = [
 const workDir = mkdtempSync(join(tmpdir(), 'metrics-kit-verify-'));
 try {
   console.log('[verify:pack] Building...');
-  run('npm', ['run', 'build'], { cwd: pkgRoot, stdio: 'inherit' });
+  run('npm', ['run', 'compile'], { cwd: pkgRoot, stdio: 'inherit' });
 
   console.log('[verify:pack] Packing tarball...');
   const [{ filename }] = JSON.parse(

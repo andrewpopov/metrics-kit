@@ -66,6 +66,8 @@ Emits `http_server_request_duration_seconds{method,route,status_class}` (buckets
 ```bash
 npm install
 npm run verify
+# once after cloning, enable the pre-push gate:
+npm run hooks
 ```
 
 See `.agents/project-guidelines.md` and `RELEASING.md`.
