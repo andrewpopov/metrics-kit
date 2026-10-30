@@ -1,6 +1,6 @@
 {
   "name": "@andrewpopov/metrics-kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fleet application metrics for Node services (Prometheus client): declared-route HTTP RED, runtime, task heartbeats, paid-API usage, loopback-only exposure.",
   "author": "Andrew Popov",
   "license": "MIT",
@@ -38,7 +38,7 @@
     "node": "^22 || ^24 || >=26"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "compile": "rm -rf dist && tsc",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json && npm run check:core-agnostic",
     "check:core-agnostic": "node scripts/check-core-agnostic.mjs",
     "test": "vitest run",
@@ -47,14 +47,14 @@
     "verify:dist-fresh": "node scripts/verify-dist-fresh.mjs",
     "audit:runtime": "npm audit --omit=dev --audit-level=high",
     "audit:development": "npm audit --audit-level=high",
-    "verify": "npm run typecheck && npm test && npm run build && npm run verify:dist-fresh && npm run verify:pack && npm run audit:runtime && npm run audit:development",
+    "verify": "npm run typecheck && npm test && npm run compile && npm run verify:dist-fresh && npm run verify:pack && npm run audit:runtime && npm run audit:development",
     "release:note": "release-kit note",
     "release:notes": "release-kit notes",
     "release:bump": "release-kit bump",
     "release:cut": "release-kit cut",
     "release:check": "release-kit check",
     "release:hygiene": "release-kit hygiene",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "hooks": "git config core.hooksPath .githooks"
   },
   "peerDependencies": {
     "express": ">=4"
@@ -66,7 +66,7 @@
   },
   "devDependencies": {
     "@andrewpopov/deploy-kit": "github:andrewpopov/deploy-kit#v0.25.0",
-    "@andrewpopov/release-kit": "github:andrewpopov/release-kit#v0.7.0",
+    "@andrewpopov/release-kit": "github:andrewpopov/release-kit#v0.7.1",
     "@types/express": "^5.0.6",
     "@types/node": "^20.14.0",
     "@types/supertest": "^7.2.1",
